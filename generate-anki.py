@@ -8,8 +8,9 @@ model_id = 1607392319
 # Define the Anki model for your deck
 my_model = genanki.Model(
     model_id,
-    'Greek to English',
+    'Greek to English Wikipedia Frequency List',
     fields=[
+        {'name': 'Num'},
         {'name': 'Greek'},
         {'name': 'English'},
         {'name': 'Pronunciation'},  # Add this field for audio
@@ -17,8 +18,8 @@ my_model = genanki.Model(
     ],
     templates=[
         {
-            'name': 'Card 1',
-            'qfmt': '{{Greek}}<br />{{Pronunciation}}',
+            'name': 'Card {{Num}}',
+            'qfmt': '<h2>{{Greek}}</h2><br />{{Pronunciation}}',
             'afmt': '{{FrontSide}}<hr id="answer"><div class="centered-text"><b>English:</b> {{English}}<br><br><b>Sentence:</b> {{Sentence}}</div>',
         },
     ])
@@ -29,24 +30,25 @@ deck_id = 2059400110
 # Define the Anki deck
 my_deck = genanki.Deck(
     deck_id,
-    'Greek Vocabulary')
+    'Greek to English Wikipedia Frequency List')
 
 # Create a list to store the media files (audio)
 media_files = []
 
 # Read data from the CSV file and add notes to the deck, skipping the first line
-with open('greek-english.csv', newline='', encoding='utf-8') as csvfile:
+with open('greek-english-600.csv', newline='', encoding='utf-8') as csvfile:
     reader = csv.reader(csvfile)
     next(reader)  # Skip the first line (titles)
-    for index, row in enumerate(reader):  # Start index at 0
-        greek_word, english_word, sentence = row  # Add sentence
+    a = 1
+    for index, row in enumerate(reader, start=0):  # Start index at 0
+        greek_word, english_word, similar, sentence = row  # Add sentence
         audio_index = index + 1  # Adjust index to start from 1 for audio files
         pronunciation_file = f'[sound:{audio_index}.mp3]'  # Format pronunciation field
         # Bold the Greek word in the sentence using HTML formatting
         sentence_with_bold = sentence.replace(greek_word, f'<b>{greek_word}</b>')
         my_note = genanki.Note(
             model=my_model,
-            fields=[greek_word, english_word, pronunciation_file, sentence_with_bold],  # Include sentence
+            fields=[f'{a}', greek_word, english_word, pronunciation_file, sentence_with_bold],  # Include sentence
         )
 
         my_deck.add_note(my_note)
@@ -54,8 +56,9 @@ with open('greek-english.csv', newline='', encoding='utf-8') as csvfile:
         # Add each audio file to the media_files list
         audio_file_path = os.path.join('el', f'{audio_index}.mp3')
         media_files.append(audio_file_path)
+        a += 1
 
 # Package the deck and write it to an .apkg file
 my_package = genanki.Package(my_deck)
 my_package.media_files = media_files  # Specify individual audio files
-my_package.write_to_file('output.apkg')
+my_package.write_to_file('Greek-English-Frequency-Cards.apkg')

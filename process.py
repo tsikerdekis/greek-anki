@@ -3,10 +3,10 @@ import nltk
 from nltk.corpus import stopwords
 import re
 from googletrans import Translator
-from gensim.models import Word2Vec
 import time
 import pickle
 import atexit
+import difflib
 
 # Initialize an empty list to store the filtered words and their translations
 filtered_words_with_translations = []
@@ -34,8 +34,10 @@ def save_translations_to_csv():
     csv_file_path = "greek-english.csv"
     with open(csv_file_path, 'w', newline='', encoding='utf-8') as csv_file:
         csv_writer = csv.writer(csv_file)
-        csv_writer.writerow(["Greek Word", "English Translation", "Example Sentence"])
-        csv_writer.writerows(filtered_words_with_translations)
+        csv_writer.writerow(["Greek Word", "English Translation", "Similar", "Example Sentence"])
+        for word_info in filtered_words_with_translations:
+            csv_writer.writerow([word_info["Greek Word"], word_info["English Translation"],
+                                 word_info["Similar"], word_info["Example Sentence"]])
     print(f"Translations saved to '{csv_file_path}'")
 
 # Register the function to save translations on exit
@@ -51,6 +53,10 @@ except FileNotFoundError:
     print(f"File '{sentences_file_path}' not found.")
 except Exception as e:
     print(f"An error occurred while reading sentences: {str(e)}")
+
+# Function to calculate string similarity between two words using SequenceMatcher
+def string_similarity(word1, word2):
+    return difflib.SequenceMatcher(None, word1, word2).ratio()
 
 try:
     with open(file_path, 'r', encoding='utf-8') as csv_file:
@@ -77,15 +83,12 @@ try:
                 if cleaned_word and all(greek_pattern.match(char) for char in cleaned_word):
                     filtered_words.append(cleaned_word.lower())
 
-    # Create and train a Word2Vec model on the filtered words
-    model = Word2Vec([filtered_words], vector_size=1000, window=100, min_count=1, sg=0)
-
-    # Calculate word similarity using the model and a threshold
-    similarity_threshold = 0.5  # Adjust the similarity threshold as needed
+    # Calculate string similarity using a threshold
+    similarity_threshold = 0.8  # Adjust the similarity threshold as needed
 
     # Initialize counters for translations
     total_translations = 0
-    max_translations = 1000  # Set the maximum number of translations
+    max_translations = 15000  # Set the maximum number of translations
 
     # Load translations from a pickle file if it exists
     translations_file_path = "translations.pkl"
@@ -96,40 +99,56 @@ try:
         except FileNotFoundError:
             pass
 
+    # Function to check if a word is similar to any existing word using string similarity
+    def is_similar_to_existing(word, existing_words, threshold):
+        most_similar_word = None
+        most_similarity = threshold  # Initialize with the threshold
+        for existing_word_info in existing_words:
+            existing_word = existing_word_info["Greek Word"]
+            result = string_similarity(word, existing_word)
+            if result > most_similarity:
+                most_similarity = result
+                most_similar_word = existing_word
+        return most_similar_word if most_similarity < 1.0 else None
+
     # Iterate through the filtered words and add them to the final list
     for word in filtered_words:
         # Check if the word is similar to any word already in the list
-        is_similar = any(model.wv.similarity(word, existing_word) > similarity_threshold for existing_word, _, _ in filtered_words_with_translations)
+        most_similar = is_similar_to_existing(word, filtered_words_with_translations, similarity_threshold)
         
-        if not is_similar:
-            # Translate the word (for testing, translate only a limited number of words)
-            if total_translations < max_translations:
-                total_translations += 1
-                print(f"Translating ({total_translations}/{len(filtered_words)}): {word}")
-                # Check if the translation exists in the saved translations
-                for saved_word, saved_translation, saved_sentence in filtered_words_with_translations:
-                    if saved_word == word:
-                        translation = saved_translation
-                        example_sentence = saved_sentence
-                        print(f"Using saved translation: {word} -> {translation}")
+        # Translate the word (for testing, translate only a limited number of words)
+        if total_translations < max_translations:
+            total_translations += 1
+            print(f"Translating ({total_translations}/{len(filtered_words)}): {word}")
+            # Check if the translation exists in the saved translations
+            for saved_word_info in filtered_words_with_translations:
+                if saved_word_info["Greek Word"] == word:
+                    word_info = saved_word_info
+                    print(f"Using saved translation: {word} -> {word_info['English Translation']}")
+                    break
+            else:
+                # Search for the word in example sentences and add the first match as the example sentence
+                for sentence in sentences:
+                    if word in sentence:
+                        example_sentence = sentence
                         break
                 else:
-                    # Search for the word in example sentences and add the first match as the example sentence
-                    for sentence in sentences:
-                        if word in sentence:
-                            example_sentence = sentence
-                            break
-                    else:
-                        example_sentence = ""  # No example sentence found
-                    translation = translator.translate(word, src='el', dest='en').text
-                    filtered_words_with_translations.append((word, translation, example_sentence))
-                    time.sleep(3)  # Sleep for 2 seconds between translations
-                    print(f"Translated: {word} -> {translation}")
-                    # Save the translations to a pickle file
-                    with open(translations_file_path, "wb") as translations_file:
-                        pickle.dump(filtered_words_with_translations, translations_file)
-            else:
-                break  # Stop after translating the specified number of words
+                    example_sentence = ""  # No example sentence found
+                translation = translator.translate(word, src='el', dest='en').text
+                word_info = {
+                    "Greek Word": word,
+                    "English Translation": translation,
+                    "Similar": most_similar,
+                    "Example Sentence": example_sentence
+                }
+                filtered_words_with_translations.append(word_info)
+                time.sleep(3)  # Sleep for 3 seconds between translations
+                print(f"Translated: {word} -> {translation}")
+                # Save the translations to a pickle file
+                with open(translations_file_path, "wb") as translations_file:
+                    pickle.dump(filtered_words_with_translations, translations_file)
+        else:
+            break  # Stop after translating the specified number of words
 
 except KeyboardInterrupt:
     print("Interrupt detected. Saving translations to CSV...")
@@ -141,6 +160,6 @@ except Exception as e:
 
 # Print the filtered Greek words with translations and example sentences
 print("Filtered Greek words with translations and example sentences:")
-for word, translation, example_sentence in filtered_words_with_translations:
-    print(f"Greek Word: {word}, English Translation: {translation}, Example Sentence: {example_sentence}")
+for word_info in filtered_words_with_translations:
+    print(f"Greek Word: {word_info['Greek Word']}, English Translation: {word_info['English Translation']}, Similar: {word_info['Similar']}, Example Sentence: {word_info['Example Sentence']}")
 save_translations_to_csv()

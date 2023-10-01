@@ -13,7 +13,7 @@ if not os.path.exists(output_folder_en):
     os.makedirs(output_folder_en)
 
 # Load the CSV file
-csv_filename = 'greek-english.csv'  # Replace with your CSV file name
+csv_filename = 'greek-english-600.csv'  # Replace with your CSV file name
 with open(csv_filename, 'r', encoding='utf-8') as csv_file:
     csv_reader = csv.reader(csv_file)
     
